@@ -78,6 +78,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <LibraryPath>D:\PostgreSQL\lib;D:\SQLAPI\vs2019\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>D:\PostgreSQL\include;$(IncludePath)</IncludePath>
+    <ExecutablePath>D:\PostgreSQL\lib;D:\PostgreSQL\bin;$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
@@ -116,10 +119,12 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libpq.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -139,7 +144,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CDatabaseController.cpp" />
+    <ClCompile Include="CDatabaseModel.cpp" />
+    <ClCompile Include="CDatabaseView.cpp" />
     <ClCompile Include="Database.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CDatabaseController.h" />
+    <ClInclude Include="CDatabaseModel.h" />
+    <ClInclude Include="CDatabaseView.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

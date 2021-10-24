@@ -3,6 +3,10 @@
 #include <iostream>
 #include <libpq-fe.h>
 //
+#include "CDatabaseModel.h"
+#include "CDatabaseView.h"
+#include "CDatabaseController.h"
+#include <memory>
 //// (c) Aleksander Alekseev 2016 | http://eax.me/
 //
 //#define UNUSED(x) (void)(x)
@@ -50,6 +54,14 @@
 
 int main()
 {
+
+    auto model = std::make_shared<model::CDatabaseModel>("postgres", "IT-company", "reussite54321");
+    auto view = std::make_shared<view::CDatabaseView>(model);
+
+    auto controller = std::make_shared<controller::CDatabaseController>(model, view);
+
+    auto choose = controller->requestAction();
+    controller->performAction(choose);
     //const std::string connection_string =
     //    "user=postgres password=reussite54321 host = 127.0.0.1 dbname= postgres";
     //PGconn* conn = PQconnectdb(connection_string.c_str());

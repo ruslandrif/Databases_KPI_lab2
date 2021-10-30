@@ -13,6 +13,12 @@ namespace view {
 
 namespace controller {
 
+	enum class searchType {
+		employeesBySalary,
+		projectsByBuyers,
+		teamsByEmployeesCount
+	};
+
 	enum class userAction : int {
 		insert = 1,
 		remove,
@@ -46,7 +52,9 @@ namespace controller {
 
 		int chooseRowInTable(int tableIndex);
 
-		std::string requestData(const char* colName, model::dataTypes type);
+		std::string requestData(const char* colName, model::dataTypes type,bool canBeLeaved = false);
+
+		model::dataTypes typeFromString(const char* str);
 
 		bool performInsert(int tableIndex);
 		bool performRemove(int tableIndex, int rowIndex);

@@ -10,7 +10,8 @@ namespace model {
 		text,
 		integer,
 		characterVarying,
-		interval
+		interval,
+		unk
 	};
 
 	const std::unordered_map<std::string, dataTypes> dataTypesMap = {

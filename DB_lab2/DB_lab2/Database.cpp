@@ -2,59 +2,15 @@
 #include <stdlib.h>
 #include <iostream>
 #include <libpq-fe.h>
-//
+
 #include "CDatabaseModel.h"
 #include "CDatabaseView.h"
 #include "CDatabaseController.h"
 #include <memory>
-//// (c) Aleksander Alekseev 2016 | http://eax.me/
-//
-//#define UNUSED(x) (void)(x)
-//
-//static const char* user_phone_arr[][2] = {
-//    { "user111", "phone111" },
-//    { "user222", "phone222" },
-//    { "user333", "phone333" },
-//    { NULL, NULL }
-//};
-//
-//static PGconn* conn = NULL;
-//static PGresult* res = NULL;
-//
-//static void
-//terminate(int code)
-//{
-//    if (code != 0)
-//        std::wcout <<  PQerrorMessage(conn);
-//
-//    if (res != NULL)
-//        PQclear(res);
-//
-//    if (conn != NULL)
-//        PQfinish(conn);
-//
-//    exit(code);
-//}
-//
-//static void
-//clearRes()
-//{
-//    PQclear(res);
-//    res = NULL;
-//}
-//
-//static void
-//processNotice(void* arg, const char* message)
-//{
-//    UNUSED(arg);
-//    UNUSED(message);
-//
-//    // do nothing
-//}
+
 
 int main()
 {
-
     auto model = std::make_shared<model::CDatabaseModel>("postgres", "IT-company", "reussite54321");
     auto view = std::make_shared<view::CDatabaseView>(model);
 

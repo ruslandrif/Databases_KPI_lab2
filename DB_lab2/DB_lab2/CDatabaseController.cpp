@@ -1,6 +1,6 @@
 #include "CDatabaseModel.h"
 #include "CDatabaseController.h"
-
+#include "CDatabaseView.h"
 #include <boost/format.hpp>
 #include <iostream>
 using namespace controller;
@@ -42,28 +42,28 @@ void CDatabaseController::performAction(userAction ua) {
 	case userAction::edit:
 		tableRow = chooseRowInTable(tableIndex);
 		performEdit(tableIndex, tableRow);
-		std::cout << "chosen edit" << std::endl;
+		//std::cout << "chosen edit" << std::endl;
 		break;
 	case userAction::remove:
 	    tableRow = chooseRowInTable(tableIndex);
 		performRemove(tableIndex, tableRow);
-		std::cout << "chosen remove" << std::endl;
+		//std::cout << "chosen remove" << std::endl;
 		break;
 	case userAction::insert:
 		performInsert(tableIndex);
-		std::cout << "chosen insert" << std::endl;
+		//std::cout << "chosen insert" << std::endl;
 		break;
 	case userAction::generateRandomData:
 		performGeneratingRandomData(tableIndex);
-		std::cout << "chosen generateRandomData" << std::endl;
+		//std::cout << "chosen generateRandomData" << std::endl;
 		break;
 	case userAction::search:
 		performSearch(tableIndex);
-		std::cout << "chosen search" << std::endl;
+		//std::cout << "chosen search" << std::endl;
 		break;
 	case userAction::unknown:
 	default:
-		std::cout << "chosen unk" << std::endl;
+		//std::cout << "chosen unk" << std::endl;
 
 		break;
 	}
@@ -115,6 +115,56 @@ bool CDatabaseController::performRemove(int tableIndex, int rowIndex) {
 }
 
 bool CDatabaseController::performEdit(int tableIndex, int rowIndex) {
+
+	auto cols = m_model->columnsInTable(tableIndex);
+	auto types = m_model->dataTyperInTable(tableIndex);
+
+	auto row = m_model->rowsInTable(tableIndex)[rowIndex];
+
+	std::vector<std::string> userInput;
+	std::string input;
+	std::getline(std::cin, input);
+	for (int i = 0; i < cols.size(); ++i) {
+
+		auto data = requestData(cols[i], typeFromString(types[i]), true);
+		
+		if (data == "*")
+			data = row[i];
+		userInput.push_back(data);
+	}
+
+	std::string updateQueryStr = (boost::format("UPDATE public.\"%s\" SET ") % m_model->tables()[tableIndex]).str();
+
+	for (int i = 0; i < userInput.size();++i) {
+		const bool needParentheses = 
+			typeFromString(types[i]) == model::dataTypes::interval ||
+			typeFromString(types[i]) == model::dataTypes::characterVarying ||
+			typeFromString(types[i]) == model::dataTypes::text;
+
+		const std::string updateVarstr = "\"" + (std::string(cols[i]) + "\"" + " = " + 
+			(needParentheses ? 
+				"'" + userInput[i] + "'" : 
+				userInput[i]) + ", ");
+		updateQueryStr += updateVarstr;
+	}
+
+	updateQueryStr.pop_back();
+	updateQueryStr.pop_back();
+	updateQueryStr += "\nWHERE ";
+
+	for (int i = 0; i < userInput.size(); ++i) {
+		const bool needParentheses =
+			typeFromString(types[i]) == model::dataTypes::interval ||
+			typeFromString(types[i]) == model::dataTypes::characterVarying ||
+			typeFromString(types[i]) == model::dataTypes::text;
+		const std::string currVarStr = "\"" + (std::string(cols[i]) + "\"" + " = " + (needParentheses ? "'" + std::string(row[i]) + "'" : row[i]) + (i == userInput.size() - 1 ? "" : " AND "));
+		updateQueryStr += currVarStr;
+	}
+	std::cout << updateQueryStr << std::endl;
+
+	auto res = m_model->query(updateQueryStr);
+
+	m_view->print(userAction::edit, res);
 	return false;
 }
 
@@ -174,9 +224,6 @@ int CDatabaseController::chooseColumnInTable(int tableNum) {
 }
 
 int CDatabaseController::chooseRowInTable(int tableIndex) {
-	//auto rowsQuery = boost::format("select * from %s") % m_model->tables()[tableIndex];
-
-	//auto* res = m_model->query(rowsQuery.str().c_str());
 
 	auto rows = m_model->rowsInTable(tableIndex);
 	auto cols = m_model->columnsInTable(tableIndex);
@@ -202,29 +249,42 @@ int CDatabaseController::chooseRowInTable(int tableIndex) {
 
 	std::cin >> choose;
 
-
 	return choose >= 1 && choose <= rows.size() ? choose - 1 : -1;
 }
 
-std::string CDatabaseController::requestData(const char* colName, model::dataTypes type) {
+std::string CDatabaseController::requestData(const char* colName, model::dataTypes type, bool canBeLeaved) {
 	std::cout << "Enter value for column " << colName;
+	if (canBeLeaved) {
+		std::cout << " or Enter * to leave it in current state: ";
+	}
 	std::string userInput;
-	
+
+	std::getline(std::cin, userInput);
+
+	if (canBeLeaved && userInput == "*")
+		return userInput;
 
 	switch (type) {
 	case model::dataTypes::characterVarying:
-		std::cin >> userInput;
-		return ("'" + userInput + "'");
+		return userInput;
 	case model::dataTypes::integer:
-		std::cin >> userInput;
 		return (userInput);
 	case model::dataTypes::interval:
-		std::cout << "\nInput format: hh:mm:ss";
-		std::cin >> userInput;
-		return ("'" + userInput + "'");
+		//std::cout << "\nInput format: hh:mm:ss";
+		return userInput;
 	case model::dataTypes::text:
-		std::cin >> userInput;
-		return ("'" + userInput + "'");
+		return userInput;
+	default:
+		return "";
 	}
 	return "";
+}
+
+model::dataTypes CDatabaseController::typeFromString(const char* str) {
+	auto key = model::dataTypesMap.find(std::string(str));
+
+	if (key != model::dataTypesMap.end())
+		return key->second;
+
+	return model::dataTypes::unk;
 }

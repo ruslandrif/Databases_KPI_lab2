@@ -26,6 +26,11 @@ CDatabaseModel::CDatabaseModel(const std::string& username, const std::string& d
 	}
 	else
 		m_tables = retrieveTables(tablesQueryResult);
+
+	auto langQuery = "SET lc_messages TO 'en_US.UTF-8';";
+	auto langResult = query(langQuery);
+
+	
 }
 
 std::string CDatabaseModel::GetLastError() const {
@@ -67,7 +72,7 @@ void CDatabaseModel::connect() {
 		"user=" + m_userName +
 		" password=" + m_password +
 		" host = 127.0.0.1 dbname=" + m_dbName +
-		" client_encoding = LATIN1";
+		" client_encoding = UTF8";
 
 	m_connection = PQconnectdb(connection_string.c_str());
 	if (m_connection == nullptr) {

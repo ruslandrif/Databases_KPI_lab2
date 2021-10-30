@@ -19,6 +19,13 @@ namespace view {
 		void print(controller::userAction userAct,PGresult* res);
 
 	private:
+
+		void printInsert(PGresult* res);
+		void printEdit(PGresult* res);
+		void printGenerate(PGresult* res);
+		void printSearch(PGresult* res);
+		void printRemove(PGresult* res);
+
 		std::shared_ptr<model::CDatabaseModel> m_model;
 	};
 }

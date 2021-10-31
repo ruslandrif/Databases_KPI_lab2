@@ -1,4 +1,0 @@
-ERROR:  operator does not exist: character varying = integer
-LINE 2: WHERE "id" = 0 AND "passport number" = 111111111 AND "team i...
-                                             ^
-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.

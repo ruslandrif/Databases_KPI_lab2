@@ -40,6 +40,8 @@ namespace model {
 
 		std::vector<std::vector<std::string>> getTuples(PGresult* res);
 
+		
+
 		void SetUserName(const std::string& username);
 		void SetPassword(const std::string& passw);
 		void SetDbName(const std::string& db);

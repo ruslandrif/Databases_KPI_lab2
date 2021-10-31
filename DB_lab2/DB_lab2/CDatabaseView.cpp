@@ -45,6 +45,16 @@ void CDatabaseView::printEdit(PGresult* res) {
 void CDatabaseView::printSearch(PGresult* res) {
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		std::cout << "Search ends with error: " << m_model->GetLastError() << std::endl;
+
+	auto tpls = m_model->getTuples(res);
+
+	for (int i = 0; i < tpls.size(); ++i) {
+		std::cout << i + 1 << ": ";
+		for (int j = 0; j < tpls[i].size(); ++j) {
+			std::cout << tpls[i][j] << " ";
+		}
+		std::cout << std::endl;
+	}
 }
 
 void CDatabaseView::printRemove(PGresult* res) {

@@ -32,7 +32,7 @@ userAction CDatabaseController::requestAction() {
 
 void CDatabaseController::performAction(userAction ua) {
 
-	int tableIndex = chooseTableForAction(ua);
+	int tableIndex = -1;
 
 	int tableRow = -1;
 
@@ -40,25 +40,29 @@ void CDatabaseController::performAction(userAction ua) {
 
 	switch (ua) {
 	case userAction::edit:
+		tableIndex = chooseTableForAction(ua);
 		tableRow = chooseRowInTable(tableIndex);
 		performEdit(tableIndex, tableRow);
 		//std::cout << "chosen edit" << std::endl;
 		break;
 	case userAction::remove:
+		tableIndex = chooseTableForAction(ua);
 	    tableRow = chooseRowInTable(tableIndex);
 		performRemove(tableIndex, tableRow);
 		//std::cout << "chosen remove" << std::endl;
 		break;
 	case userAction::insert:
+		tableIndex = chooseTableForAction(ua);
 		performInsert(tableIndex);
 		//std::cout << "chosen insert" << std::endl;
 		break;
 	case userAction::generateRandomData:
+		tableIndex = chooseTableForAction(ua);
 		performGeneratingRandomData(tableIndex);
 		//std::cout << "chosen generateRandomData" << std::endl;
 		break;
 	case userAction::search:
-		performSearch(tableIndex);
+		performSearch();
 		//std::cout << "chosen search" << std::endl;
 		break;
 	case userAction::unknown:
@@ -181,8 +185,45 @@ bool CDatabaseController::performGeneratingRandomData(int tableIndex) {
 	return false;
 }
 
-bool CDatabaseController::performSearch(int tableIndex) {
-	return false;
+bool CDatabaseController::performSearch() {
+
+	std::cout << "Choose what to search:\n";
+	int count = 0;
+	for (auto& pair : searchModeMap) {
+		std::cout << ++count << "." << pair.second << std::endl;
+	}
+	std::cout << "Your choice:";
+	int choose = -1;
+	std::cin >> choose;
+
+	constexpr int max_searchMode_val = 3;
+	constexpr int min_searchMode_val = 1;
+
+	if (choose < min_searchMode_val || choose > max_searchMode_val) {
+		std::cout << "wrong input!";
+		return false;
+	}
+
+	auto mode = static_cast<searchType>(choose - 1);
+
+	const int cnt = GetCountElemsForSearch(mode);
+
+	std::unordered_map<int, int> searchMap;
+	auto tables = m_model->tables();
+
+	switch (mode) {
+	case searchType::employeesBySalary:
+		m_view->print(userAction::search,searchEmployees(cnt));
+		break;
+	case searchType::projectsByBuyers:
+		m_view->print(userAction::search, searchProjects(cnt));
+		break;
+	case searchType::teamsByEmployeesCount:
+		m_view->print(userAction::search, searchTeams(cnt));
+		break;
+	default:
+		break;
+	}
 }
 
 int CDatabaseController::chooseTableForAction(userAction ua) {
@@ -287,4 +328,197 @@ model::dataTypes CDatabaseController::typeFromString(const char* str) {
 		return key->second;
 
 	return model::dataTypes::unk;
+}
+
+
+int CDatabaseController::GetCountElemsForSearch(searchType st) {
+	int count = 0;
+	switch (st) {
+	case searchType::employeesBySalary:
+		std::cout << "Enter salary:";
+		break;
+	case searchType::projectsByBuyers:
+		std::cout << "Enter count of buyers:";
+		break;
+	case searchType::teamsByEmployeesCount:
+		std::cout << "Enter count of employees:";
+		break;
+	default:
+		break;
+	}
+
+	std::cin >> count;
+
+	return count;
+}
+
+
+
+PGresult* CDatabaseController::searchEmployees(int salary) {
+	PGresult* res = nullptr;
+
+	auto tables = m_model->tables();
+
+	auto iterEmployees = std::find_if(tables.begin(), tables.end(), [this](const char* tableName) {
+		return std::string(tableName) == "Employee";
+	});
+
+	auto iterPositions = std::find_if(tables.begin(), tables.end(), [this](const char* tableName) {
+		return std::string(tableName) == "Position";
+	});
+
+	auto positionCols = m_model->columnsInTable(iterPositions - tables.begin());
+	auto employeesCols = m_model->columnsInTable(iterEmployees - tables.begin());
+
+	std::string PositionsQuery = "SELECT ";
+	for (auto& i : positionCols)
+		PositionsQuery += "\"" + std::string(i) + "\",";
+	PositionsQuery.pop_back();
+	PositionsQuery += "\nFROM public.\"Position\"\n";
+	PositionsQuery += (boost::format("WHERE \"salary\" < %d") % salary).str();
+
+	res = m_model->query(PositionsQuery);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+		std::cout << "Error search positions!";
+		return res;
+	}
+
+
+	auto tpls = m_model->getTuples(res);
+
+	std::vector<int> neededPositionsId;
+	for (auto& tuple : tpls) {
+		neededPositionsId.push_back(std::stoi(tuple[0]));
+	}
+
+	//std::cout << "positions id:\n";
+	//for (int i = 0; i < neededPositionsId.size(); ++i) {
+	//	std::cout << neededPositionsId[i] << std::endl;
+	//}
+
+	std::string employeesQuery = "SELECT ";
+	for (auto& i : employeesCols)
+		employeesQuery += "\"" + std::string(i) + "\",";
+
+	employeesQuery.pop_back();
+	employeesQuery += "\nFROM public.\"Employee\"\n";
+	employeesQuery += "WHERE \"id\" = " + std::to_string(neededPositionsId[0]);
+	for (int i = 1; i < neededPositionsId.size(); ++i) {
+		employeesQuery += " OR \"id\"= " + std::to_string(neededPositionsId[i]);
+	}
+
+	std::cout << employeesQuery << std::endl;
+
+	res = m_model->query(employeesQuery);
+	
+
+	return res;
+}
+
+PGresult* CDatabaseController::searchTeams(int employeesCount) {
+	PGresult* res = nullptr;
+
+	auto tables = m_model->tables();
+
+	auto iterEmployees = std::find_if(tables.begin(), tables.end(), [this](const char* tableName) {
+		return std::string(tableName) == "Employee";
+	});
+
+	auto iterTeams = std::find_if(tables.begin(), tables.end(), [this](const char* tableName) {
+		return std::string(tableName) == "Team";
+	});
+
+	using team_id = int;
+	std::unordered_map<team_id, int> teamEmployees;
+
+	auto rows = m_model->rowsInTable(iterEmployees - tables.begin());
+
+	constexpr int teamIdIndex = 2;
+
+	for (auto& row : rows) {
+		teamEmployees[std::stoi(row[teamIdIndex])]++;
+	}
+
+	for (auto& pair : teamEmployees) {
+		std::cout << "team id: " << pair.first << " count: " << pair.second << std::endl;
+	}
+
+	std::string teamsArray = "ANY(ARRAY[";
+	for (auto& pair : teamEmployees) {
+		if (pair.second < employeesCount)
+			teamsArray += std::to_string(pair.first) + ",";
+	}
+	teamsArray.pop_back();
+	teamsArray += "])";
+
+	std::string teamsQuery = "SELECT * FROM public.\"Team\" WHERE \"id\" = " + teamsArray;
+
+	std::cout << teamsQuery << std::endl;
+
+	res = m_model->query(teamsQuery);
+
+	return res;
+}
+
+PGresult* CDatabaseController::searchProjects(int buyersCount) {
+	PGresult* res = nullptr;
+
+
+	const auto tables = m_model->tables();
+
+	const auto iterProjectOrders = std::find_if(tables.begin(), tables.end(), [this](const char* tableName) {
+		return std::string(tableName) == "Project order";
+	});
+
+	const auto iterProjects = std::find_if(tables.begin(), tables.end(), [this](const char* tableName) {
+		return std::string(tableName) == "Project";
+	});
+
+	auto projectOrderCols = m_model->columnsInTable(iterProjectOrders - tables.begin());
+
+	constexpr int idIndexProject = 0;
+
+	std::unordered_map<int, int> buyersForProject;
+	std::vector<std::pair<int, int>> usedPairs;
+
+	auto rowsOrders = m_model->rowsInTable(iterProjectOrders - tables.begin());
+	auto rowsProjects = m_model->rowsInTable(iterProjects - tables.begin());
+
+	for (auto& proj : rowsProjects) {
+		const int id = std::stoi(proj[0]);
+		buyersForProject[id] = 0;
+		for (auto& order : rowsOrders) {
+			const int currProjectId = std::stoi(order[3]);
+
+			if (currProjectId == id) {
+				const int currBuyerId = std::stoi(order[1]);
+				if (std::find(usedPairs.begin(), usedPairs.end(), std::pair<int,int>(currProjectId,currBuyerId)) == usedPairs.end()) {
+					buyersForProject[currProjectId]++;
+					usedPairs.push_back(std::pair<int, int>(currProjectId, currBuyerId));
+				}
+			}
+		}
+	}
+
+	std::cout << "projects and unique buyers:\n";
+	for (auto& pair : buyersForProject) {
+		std::cout << "project id: " << pair.first << "buyers: " << pair.second << std::endl;
+	}
+
+	std::string projectsArray = "ANY(ARRAY[";
+	for (auto& pair : buyersForProject) {
+		if (pair.second < buyersCount)
+			projectsArray += std::to_string(pair.first) + ",";
+	}
+	projectsArray.pop_back();
+	projectsArray += "])";
+
+	std::string projectsQuery = "SELECT * FROM public.\"Project\" WHERE \"id\" = " + projectsArray;
+
+	std::cout << projectsQuery << std::endl;
+
+	res = m_model->query(projectsQuery);
+
+	return res;
 }

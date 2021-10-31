@@ -16,7 +16,14 @@ namespace controller {
 	enum class searchType {
 		employeesBySalary,
 		projectsByBuyers,
-		teamsByEmployeesCount
+		teamsByEmployeesCount,
+		unknown
+	};
+
+	const std::unordered_map<searchType, std::string> searchModeMap = {
+		{searchType::employeesBySalary,"Search employees,which salary is less than N"},
+		{searchType::projectsByBuyers,"Search projects, which has less than N buyers"},
+		{searchType::teamsByEmployeesCount,"Search teams,which has less than N employees"},
 	};
 
 	enum class userAction : int {
@@ -46,11 +53,17 @@ namespace controller {
 		void performAction(userAction ua);
 	private:
 
+		int GetCountElemsForSearch(searchType st);
+
 		int chooseTableForAction(userAction ua);
 
 		int chooseColumnInTable(int tableNum);
 
 		int chooseRowInTable(int tableIndex);
+
+		PGresult* searchEmployees(int salary);
+		PGresult* searchTeams(int employeesCount);
+		PGresult* searchProjects(int buyersCount);
 
 		std::string requestData(const char* colName, model::dataTypes type,bool canBeLeaved = false);
 
@@ -60,7 +73,7 @@ namespace controller {
 		bool performRemove(int tableIndex, int rowIndex);
 		bool performEdit(int tableIndex, int rowIndex);
 		bool performGeneratingRandomData(int tableIndex);
-		bool performSearch(int tableIndex);
+		bool performSearch();
 
 		std::shared_ptr<model::CDatabaseModel> m_model;
 		std::shared_ptr<view::CDatabaseView> m_view;

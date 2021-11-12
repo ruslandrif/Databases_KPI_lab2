@@ -69,11 +69,11 @@ namespace controller {
 
 		model::dataTypes typeFromString(const char* str);
 
-		bool performInsert(int tableIndex);
-		bool performRemove(int tableIndex, int rowIndex);
-		bool performEdit(int tableIndex, int rowIndex);
-		bool performGeneratingRandomData(int tableIndex);
-		bool performSearch();
+		PGresult* performInsert(int tableIndex);
+		PGresult* performRemove(int tableIndex, int rowIndex);
+		PGresult* performEdit(int tableIndex, int rowIndex);
+		PGresult* performGeneratingRandomData(int tableIndex);
+		PGresult* performSearch();
 
 		std::shared_ptr<model::CDatabaseModel> m_model;
 		std::shared_ptr<view::CDatabaseView> m_view;

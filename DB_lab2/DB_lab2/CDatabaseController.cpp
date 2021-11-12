@@ -42,27 +42,27 @@ void CDatabaseController::performAction(userAction ua) {
 	case userAction::edit:
 		tableIndex = chooseTableForAction(ua);
 		tableRow = chooseRowInTable(tableIndex);
-		performEdit(tableIndex, tableRow);
+		m_view->print(ua,performEdit(tableIndex, tableRow));
 		//std::cout << "chosen edit" << std::endl;
 		break;
 	case userAction::remove:
 		tableIndex = chooseTableForAction(ua);
 	    tableRow = chooseRowInTable(tableIndex);
-		performRemove(tableIndex, tableRow);
+		m_view->print(ua, performRemove(tableIndex, tableRow));
 		//std::cout << "chosen remove" << std::endl;
 		break;
 	case userAction::insert:
 		tableIndex = chooseTableForAction(ua);
-		performInsert(tableIndex);
+		m_view->print(ua, performInsert(tableIndex));
 		//std::cout << "chosen insert" << std::endl;
 		break;
 	case userAction::generateRandomData:
 		tableIndex = chooseTableForAction(ua);
-		performGeneratingRandomData(tableIndex);
+		m_view->print(ua, performGeneratingRandomData(tableIndex));
 		//std::cout << "chosen generateRandomData" << std::endl;
 		break;
 	case userAction::search:
-		performSearch();
+		m_view->print(ua, performSearch());
 		//std::cout << "chosen search" << std::endl;
 		break;
 	case userAction::unknown:
@@ -73,7 +73,7 @@ void CDatabaseController::performAction(userAction ua) {
 	}
 }
 
-bool CDatabaseController::performInsert(int tableIndex) {
+PGresult* CDatabaseController::performInsert(int tableIndex) {
 
 	auto cols = m_model->columnsInTable(tableIndex);
 	auto types = m_model->dataTyperInTable(tableIndex);
@@ -111,14 +111,67 @@ bool CDatabaseController::performInsert(int tableIndex) {
 	if (PQresultStatus(insertQueryRes) != PGRES_COMMAND_OK)
 		std::wcout << reinterpret_cast<const wchar_t*>(m_model->GetLastError().data());
 
-	return false;
+	return insertQueryRes;
 }
 
-bool CDatabaseController::performRemove(int tableIndex, int rowIndex) {
-	return false;
+PGresult* CDatabaseController::performRemove(int tableIndex, int rowIndex) {
+	auto tables = m_model->tables();
+	auto cols = m_model->columnsInTable(tableIndex);
+	auto rows = m_model->rowsInTable(tableIndex);
+
+	auto pKey = m_model->getTablePrimaryKey(tableIndex);
+
+	auto pKeyIter = std::find_if(cols.begin(), cols.end(), [&](const char* col) {
+		return std::string(col) == pKey; 
+	});
+
+	const int pKeyIndex = pKeyIter - cols.begin();
+
+	std::string removeQuery = (boost::format(
+		"DELETE FROM public.\"%s\"\n"
+		"WHERE \"%s\" = %s"
+	) % tables[tableIndex] % cols[pKeyIndex] % rows[rowIndex][pKeyIndex]).str();
+
+	std::cout << removeQuery << std::endl;
+
+	std::cout << "Checking parent link!\n";
+
+	for(auto it = model::relations.begin();it != model::relations.end();++it)
+	if (it->child.first == tables[tableIndex]) {
+		std::cout << "found relation! table to delete from: " << it->child.first << " parent: " << it->parent.first;
+
+		auto parentTableIndex = std::find_if(tables.begin(), tables.end(), [&](const char* t) {
+			return std::string(t) == it->parent.first; 
+		}) - tables.begin();
+
+		auto parentTableCols = m_model->columnsInTable(parentTableIndex);
+		auto parentFieldIndex = std::find_if(parentTableCols.begin(), parentTableCols.end(), [&](const char* col) {
+			return std::string(col) == it->parent.second;
+		}) - parentTableCols.begin();
+
+		auto childFieldIndex = std::find_if(cols.begin(), cols.end(), [&](const char* col) {
+			return std::string(col) == it->child.second;
+		}) - cols.begin();
+
+		auto parentRows = m_model->rowsInTable(parentTableIndex);
+		
+		bool found = false;
+		int indx = 0;
+		for (auto& r : parentRows) {
+			if (std::string(r[parentFieldIndex]) == std::string(rows[rowIndex][childFieldIndex])) {
+				found = true;
+
+				performRemove(parentTableIndex, indx);
+				//break;
+			}
+			indx++;
+		}
+	}
+
+	return m_model->query(removeQuery);
 }
 
-bool CDatabaseController::performEdit(int tableIndex, int rowIndex) {
+PGresult* CDatabaseController::performEdit(int tableIndex, int rowIndex) {
 
 	auto cols = m_model->columnsInTable(tableIndex);
 	auto types = m_model->dataTyperInTable(tableIndex);
@@ -168,24 +221,61 @@ bool CDatabaseController::performEdit(int tableIndex, int rowIndex) {
 
 	auto res = m_model->query(updateQueryStr);
 
-	m_view->print(userAction::edit, res);
-	return false;
+	
+	return res;
 }
 
-bool CDatabaseController::performGeneratingRandomData(int tableIndex) {
+PGresult* CDatabaseController::performGeneratingRandomData(int tableIndex) {
+
+	auto randomStrByType = [&](model::dataTypes dt) -> std::string {
+		using namespace model;
+		switch (dt) {
+		case dataTypes::characterVarying:
+			return "substr(md5(random()::text), 1, 9)";
+		case dataTypes::integer:
+			return "(random()*10000)::integer";
+		case dataTypes::interval:
+			return "INTERVAL '00:00:00' * (random()*10)::integer";
+		case dataTypes::text:
+			return "random()::text";
+		case dataTypes::unk:
+			return "";
+		}
+	};
 
 	auto types = m_model->dataTyperInTable(tableIndex);
 
 	auto cols = m_model->columnsInTable(tableIndex);
 
-	for (int i = 0; i < cols.size(); ++i) {
-		std::cout << cols[i] << ": " << types[i] << std::endl;
+	auto tables = m_model->tables();
+
+	std::vector<std::string> generatingStrings;
+
+	for (auto& t : types) {
+		auto type = typeFromString(t);
+
+		generatingStrings.push_back(randomStrByType(type));
 	}
 
-	return false;
+	std::string generateQuery = "INSERT INTO public.\"" + std::string(tables[tableIndex]) + "\"(";
+	for (auto& col : cols)
+		generateQuery += "\"" + std::string(col) + "\",";
+
+	generateQuery.pop_back();
+	generateQuery += ")";
+	generateQuery += "\nSELECT";
+
+	for (auto& randStr : generatingStrings)
+		generateQuery += "\n" + randStr + ",";
+	generateQuery.pop_back();
+	generateQuery += (boost::format("\nFROM generate_series(1,%d)\nON CONFLICT DO NOTHING") % model::randomDataCount).str();
+
+	std::cout << generateQuery << std::endl;
+
+	return m_model->query(generateQuery);
 }
 
-bool CDatabaseController::performSearch() {
+PGresult* CDatabaseController::performSearch() {
 
 	std::cout << "Choose what to search:\n";
 	int count = 0;
@@ -201,7 +291,7 @@ bool CDatabaseController::performSearch() {
 
 	if (choose < min_searchMode_val || choose > max_searchMode_val) {
 		std::cout << "wrong input!";
-		return false;
+		return nullptr;
 	}
 
 	auto mode = static_cast<searchType>(choose - 1);
@@ -210,20 +300,21 @@ bool CDatabaseController::performSearch() {
 
 	std::unordered_map<int, int> searchMap;
 	auto tables = m_model->tables();
-
+	PGresult* res = nullptr;
 	switch (mode) {
 	case searchType::employeesBySalary:
-		m_view->print(userAction::search,searchEmployees(cnt));
+		res = searchEmployees(cnt);
 		break;
 	case searchType::projectsByBuyers:
-		m_view->print(userAction::search, searchProjects(cnt));
+		res = searchProjects(cnt);
 		break;
 	case searchType::teamsByEmployeesCount:
-		m_view->print(userAction::search, searchTeams(cnt));
+		res = searchTeams(cnt);
 		break;
 	default:
 		break;
 	}
+	return res;
 }
 
 int CDatabaseController::chooseTableForAction(userAction ua) {
@@ -272,12 +363,36 @@ int CDatabaseController::chooseRowInTable(int tableIndex) {
 	if (rows.empty())
 		return -1;
 
-	std::cout << "Choose row in table:\n";
-	for (auto& col : cols)
-		std::cout << "\t" << col;
-	std::cout << std::endl;
 
-	for (int i = 0; i < rows.size(); ++i) {
+
+	std::cout << "Choose row in table.\n";
+	std::cout 
+		<< "Choose rows to show:(1 option by default)\n"
+		<< "1.All rows\n"
+		<< "2.First 15 rows\n"
+		<< "3.Last 15 rows\n";
+	int showChoose = -1;
+	std::cout << "Your choice:";
+	std::cin >> showChoose;
+	if (showChoose < 1 || showChoose > 3 || rows.size() <= 15)
+		showChoose = 1;
+	int left = -1, right = -1;
+	switch (showChoose) {
+	case 1:
+		left = 0;
+		right = rows.size();
+		break;
+	case 2:
+		left = 0;
+		right = 15;
+		break;
+	case 3:
+		left = 15;
+		right = rows.size();
+		break;
+	}
+
+	for (int i = left; i < right; ++i) {
 		std::cout << i + 1 << ".";
 
 		for (int j = 0; j < rows[i].size(); ++j) {
@@ -300,8 +415,7 @@ std::string CDatabaseController::requestData(const char* colName, model::dataTyp
 	}
 	std::string userInput;
 
-	std::getline(std::cin, userInput);
-
+	std::cin >> userInput;
 	if (canBeLeaved && userInput == "*")
 		return userInput;
 
@@ -408,7 +522,7 @@ PGresult* CDatabaseController::searchEmployees(int salary) {
 		employeesQuery += " OR \"id\"= " + std::to_string(neededPositionsId[i]);
 	}
 
-	std::cout << employeesQuery << std::endl;
+	//std::cout << employeesQuery << std::endl;
 
 	res = m_model->query(employeesQuery);
 	
@@ -454,7 +568,7 @@ PGresult* CDatabaseController::searchTeams(int employeesCount) {
 
 	std::string teamsQuery = "SELECT * FROM public.\"Team\" WHERE \"id\" = " + teamsArray;
 
-	std::cout << teamsQuery << std::endl;
+	//std::cout << teamsQuery << std::endl;
 
 	res = m_model->query(teamsQuery);
 
@@ -501,10 +615,10 @@ PGresult* CDatabaseController::searchProjects(int buyersCount) {
 		}
 	}
 
-	std::cout << "projects and unique buyers:\n";
-	for (auto& pair : buyersForProject) {
-		std::cout << "project id: " << pair.first << "buyers: " << pair.second << std::endl;
-	}
+	//std::cout << "projects and unique buyers:\n";
+	//for (auto& pair : buyersForProject) {
+	//	std::cout << "project id: " << pair.first << "buyers: " << pair.second << std::endl;
+	//}
 
 	std::string projectsArray = "ANY(ARRAY[";
 	for (auto& pair : buyersForProject) {
@@ -516,7 +630,7 @@ PGresult* CDatabaseController::searchProjects(int buyersCount) {
 
 	std::string projectsQuery = "SELECT * FROM public.\"Project\" WHERE \"id\" = " + projectsArray;
 
-	std::cout << projectsQuery << std::endl;
+	//std::cout << projectsQuery << std::endl;
 
 	res = m_model->query(projectsQuery);
 

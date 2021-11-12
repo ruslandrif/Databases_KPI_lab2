@@ -35,11 +35,11 @@ CDatabaseModel::CDatabaseModel(const std::string& username, const std::string& d
 
 std::string CDatabaseModel::GetLastError() const {
 
-	std::ofstream out("1.txt", std::fstream::out);
+	//std::ofstream out("1.txt", std::fstream::out);
 
 	auto msg = PQerrorMessage(m_connection);
 
-	out << msg;
+	//out << msg;
 
 	return msg;
 }
@@ -172,7 +172,7 @@ std::vector<std::vector<const char*>> CDatabaseModel::rowsInTable(int tableIndex
 
 	auto* queryRes = query(dataQuery.c_str());
 
-	std::cout << dataQuery << std::endl;
+	//std::cout << dataQuery << std::endl;
 
 	if (PQresultStatus(queryRes) != PGRES_TUPLES_OK)
 		std::cout << GetLastError() << "-";
@@ -184,7 +184,7 @@ std::vector<std::vector<const char*>> CDatabaseModel::rowsInTable(int tableIndex
 			//std::cout << name << " ";
 			res[i][j] = name;
 		}
-		std::cout << std::endl;
+		//std::cout << std::endl;
 	}
 
 	return res;
@@ -204,4 +204,23 @@ std::vector<std::vector<std::string>> CDatabaseModel::getTuples(PGresult* res) {
 	}
 
 	return resVec;
+}
+
+std::string CDatabaseModel::getTablePrimaryKey(int tableIndex) {
+	auto* tablename = m_tables[tableIndex];
+
+	std::string queryPKey = (boost::format(
+		"SELECT a.attname, format_type(a.atttypid, a.atttypmod) AS data_type\n"
+		"FROM   pg_index i\n"
+		"JOIN   pg_attribute a ON a.attrelid = i.indrelid\n"
+		"AND a.attnum = ANY(i.indkey)\n"
+		"WHERE  i.indrelid = 'public.\"%s\"'::regclass\n"
+		"AND    i.indisprimary;") % tablename).str();
+
+	auto* res = query(queryPKey);
+
+	if (PQresultStatus(res) == PGRES_TUPLES_OK) {
+		return getTuples(res)[0][0];
+	}
+	return std::string();
 }

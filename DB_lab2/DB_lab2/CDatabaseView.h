@@ -16,15 +16,18 @@ namespace view {
 	public:
 		CDatabaseView(std::shared_ptr<model::CDatabaseModel> model_);
 
-		void print(controller::userAction userAct,PGresult* res);
+		void printOperationResult(controller::userAction userAct,PGresult* res) const;
+
+		void printDB() const;
+		void printDB(int tableIndex) const;
 
 	private:
 
-		void printInsert(PGresult* res);
-		void printEdit(PGresult* res);
-		void printGenerate(PGresult* res);
-		void printSearch(PGresult* res);
-		void printRemove(PGresult* res);
+		void printInsert(PGresult* res) const;
+		void printEdit(PGresult* res) const;
+		void printGenerate(PGresult* res) const;
+		void printSearch(PGresult* res) const;
+		void printRemove(PGresult* res) const;
 
 		std::shared_ptr<model::CDatabaseModel> m_model;
 	};

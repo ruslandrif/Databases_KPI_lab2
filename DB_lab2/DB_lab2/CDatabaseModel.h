@@ -31,7 +31,7 @@ namespace model {
 		unk
 	};
 
-	constexpr int randomDataCount = 100000;
+	constexpr int randomDataCount = 4;
 
 	const std::unordered_map<std::string, dataTypes> dataTypesMap = {
 		{"text",dataTypes::text},

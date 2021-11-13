@@ -3,6 +3,8 @@
 #include "CDatabaseView.h"
 #include <boost/format.hpp>
 #include <iostream>
+#include <iomanip>
+#include <regex>
 using namespace controller;
 
 userAction CDatabaseController::requestAction() {
@@ -15,13 +17,14 @@ userAction CDatabaseController::requestAction() {
 	cout << "3.Edit data in the database\n";
 	cout << "4.Generate random data in the database\n";
 	cout << "5.Search data in the database\n";
+	cout << "6.Print data in the database\n";
 	cout << "Enter your choice:";
 
 	int choose = -1;
 
 	std::cin >> choose;
 
-	constexpr int max_userAction_val = 6;
+	constexpr int max_userAction_val = 7;
 	constexpr int min_userAction_val = 1;
 
 	if (choose > max_userAction_val && choose < min_userAction_val)
@@ -42,27 +45,32 @@ void CDatabaseController::performAction(userAction ua) {
 	case userAction::edit:
 		tableIndex = chooseTableForAction(ua);
 		tableRow = chooseRowInTable(tableIndex);
-		m_view->print(ua,performEdit(tableIndex, tableRow));
+		m_view->printOperationResult(ua,performEdit(tableIndex, tableRow));
 		//std::cout << "chosen edit" << std::endl;
 		break;
 	case userAction::remove:
 		tableIndex = chooseTableForAction(ua);
 	    tableRow = chooseRowInTable(tableIndex);
-		m_view->print(ua, performRemove(tableIndex, tableRow));
+		m_view->printOperationResult(ua, performRemove(tableIndex, tableRow));
 		//std::cout << "chosen remove" << std::endl;
 		break;
 	case userAction::insert:
 		tableIndex = chooseTableForAction(ua);
-		m_view->print(ua, performInsert(tableIndex));
+		m_view->printOperationResult(ua, performInsert(tableIndex));
 		//std::cout << "chosen insert" << std::endl;
 		break;
 	case userAction::generateRandomData:
 		tableIndex = chooseTableForAction(ua);
-		m_view->print(ua, performGeneratingRandomData(tableIndex));
+		m_view->printOperationResult(ua, performGeneratingRandomData(tableIndex));
+		m_view->printDB(tableIndex);
 		//std::cout << "chosen generateRandomData" << std::endl;
 		break;
 	case userAction::search:
-		m_view->print(ua, performSearch());
+		m_view->printOperationResult(ua, performSearch());
+		//std::cout << "chosen search" << std::endl;
+		break;
+	case userAction::print:
+		m_view->printOperationResult(ua,nullptr);
 		//std::cout << "chosen search" << std::endl;
 		break;
 	case userAction::unknown:
@@ -90,6 +98,17 @@ PGresult* CDatabaseController::performInsert(int tableIndex) {
 			std::cout << "key is end!\n";
 	}
 
+	for (int i = 0; i < userData.size(); ++i) {
+		const bool needParentheses =
+			typeFromString(types[i]) == model::dataTypes::interval ||
+			typeFromString(types[i]) == model::dataTypes::characterVarying ||
+			typeFromString(types[i]) == model::dataTypes::text;
+
+		if (needParentheses) {
+			userData[i] = "'" + userData[i] + "'";
+		}
+	}
+
 	std::string userInputStr;
 
 	for (auto input : userData) {
@@ -99,13 +118,12 @@ PGresult* CDatabaseController::performInsert(int tableIndex) {
 	userInputStr.pop_back();
 	userInputStr.push_back(')');
 	userInputStr.insert(0, 1, '(');
-	std::cout << userInputStr;
+	
 
 	std::string insertQuery = (boost::format(
 		"INSERT INTO \"%s\"\n"
 		"VALUES %s"
 	) % m_model->tables()[tableIndex] % userInputStr).str();
-
 	auto* insertQueryRes = m_model->query(insertQuery.c_str());
 
 	if (PQresultStatus(insertQueryRes) != PGRES_COMMAND_OK)
@@ -132,13 +150,9 @@ PGresult* CDatabaseController::performRemove(int tableIndex, int rowIndex) {
 		"WHERE \"%s\" = %s"
 	) % tables[tableIndex] % cols[pKeyIndex] % rows[rowIndex][pKeyIndex]).str();
 
-	std::cout << removeQuery << std::endl;
-
-	std::cout << "Checking parent link!\n";
-
 	for(auto it = model::relations.begin();it != model::relations.end();++it)
 	if (it->child.first == tables[tableIndex]) {
-		std::cout << "found relation! table to delete from: " << it->child.first << " parent: " << it->parent.first;
+		
 
 		auto parentTableIndex = std::find_if(tables.begin(), tables.end(), [&](const char* t) {
 			return std::string(t) == it->parent.first; 
@@ -228,6 +242,7 @@ PGresult* CDatabaseController::performEdit(int tableIndex, int rowIndex) {
 PGresult* CDatabaseController::performGeneratingRandomData(int tableIndex) {
 
 	auto randomStrByType = [&](model::dataTypes dt) -> std::string {
+		//std::cout << "type: " << static_cast<int>(dt) << std::endl;
 		using namespace model;
 		switch (dt) {
 		case dataTypes::characterVarying:
@@ -237,7 +252,7 @@ PGresult* CDatabaseController::performGeneratingRandomData(int tableIndex) {
 		case dataTypes::interval:
 			return "INTERVAL '00:00:00' * (random()*10)::integer";
 		case dataTypes::text:
-			return "random()::text";
+			return "substr(md5(random()::text), 0, 15)";
 		case dataTypes::unk:
 			return "";
 		}
@@ -269,9 +284,6 @@ PGresult* CDatabaseController::performGeneratingRandomData(int tableIndex) {
 		generateQuery += "\n" + randStr + ",";
 	generateQuery.pop_back();
 	generateQuery += (boost::format("\nFROM generate_series(1,%d)\nON CONFLICT DO NOTHING") % model::randomDataCount).str();
-
-	std::cout << generateQuery << std::endl;
-
 	return m_model->query(generateQuery);
 }
 
@@ -409,16 +421,24 @@ int CDatabaseController::chooseRowInTable(int tableIndex) {
 }
 
 std::string CDatabaseController::requestData(const char* colName, model::dataTypes type, bool canBeLeaved) {
-	std::cout << "Enter value for column " << colName;
-	if (canBeLeaved) {
-		std::cout << " or Enter * to leave it in current state: ";
-	}
 	std::string userInput;
+	bool dataValid = true;
+	do {
+		if (!dataValid) {
+			std::cout << "Invalid data!\n";
+		}
+		std::cout << "Enter value for column " << colName << " ";
+		if (canBeLeaved) {
+			std::cout << " or Enter * to leave it in current state: ";
+		}
+		
 
-	std::cin >> userInput;
-	if (canBeLeaved && userInput == "*")
-		return userInput;
+		std::cin >> userInput;
+		if (canBeLeaved && userInput == "*")
+			return userInput;
 
+		dataValid = false;
+	} while (!checkValidInput(userInput,type));
 	switch (type) {
 	case model::dataTypes::characterVarying:
 		return userInput;
@@ -498,6 +518,11 @@ PGresult* CDatabaseController::searchEmployees(int salary) {
 		return res;
 	}
 
+	std::cout << "Search employees result:\n";
+	for (auto& col : employeesCols) {
+		std::cout << std::setw(20) << col;
+	}
+	std::cout << std::endl;
 
 	auto tpls = m_model->getTuples(res);
 
@@ -505,11 +530,6 @@ PGresult* CDatabaseController::searchEmployees(int salary) {
 	for (auto& tuple : tpls) {
 		neededPositionsId.push_back(std::stoi(tuple[0]));
 	}
-
-	//std::cout << "positions id:\n";
-	//for (int i = 0; i < neededPositionsId.size(); ++i) {
-	//	std::cout << neededPositionsId[i] << std::endl;
-	//}
 
 	std::string employeesQuery = "SELECT ";
 	for (auto& i : employeesCols)
@@ -522,11 +542,8 @@ PGresult* CDatabaseController::searchEmployees(int salary) {
 		employeesQuery += " OR \"id\"= " + std::to_string(neededPositionsId[i]);
 	}
 
-	//std::cout << employeesQuery << std::endl;
-
 	res = m_model->query(employeesQuery);
 	
-
 	return res;
 }
 
@@ -615,11 +632,6 @@ PGresult* CDatabaseController::searchProjects(int buyersCount) {
 		}
 	}
 
-	//std::cout << "projects and unique buyers:\n";
-	//for (auto& pair : buyersForProject) {
-	//	std::cout << "project id: " << pair.first << "buyers: " << pair.second << std::endl;
-	//}
-
 	std::string projectsArray = "ANY(ARRAY[";
 	for (auto& pair : buyersForProject) {
 		if (pair.second < buyersCount)
@@ -630,9 +642,28 @@ PGresult* CDatabaseController::searchProjects(int buyersCount) {
 
 	std::string projectsQuery = "SELECT * FROM public.\"Project\" WHERE \"id\" = " + projectsArray;
 
-	//std::cout << projectsQuery << std::endl;
-
 	res = m_model->query(projectsQuery);
 
 	return res;
+}
+
+bool CDatabaseController::checkValidInput(const std::string& input, model::dataTypes dataType) {
+	using namespace model;
+	const std::regex timeRegex("([01]?[0-9]|2[0-3]):[0-5][0-9]");
+	switch (dataType) {
+	case dataTypes::characterVarying:
+		return input.size() == 9; //in that database, the only field which is character varying is passport number, it must have 9 characters
+	case dataTypes::integer:
+		for (auto& c : input) {
+			if (!std::isdigit(c))
+				return false;
+		}
+		return true;
+	case dataTypes::interval:
+		return std::regex_match(input, timeRegex);
+	case dataTypes::text:
+		return true;
+	case dataTypes::unk:
+		return false;
+	}
 }

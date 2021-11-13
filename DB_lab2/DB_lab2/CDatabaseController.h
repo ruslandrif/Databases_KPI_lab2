@@ -32,6 +32,7 @@ namespace controller {
 		edit,
 		generateRandomData,
 		search,
+		print,
 		unknown
 	};
 
@@ -52,6 +53,8 @@ namespace controller {
 
 		void performAction(userAction ua);
 	private:
+
+		bool checkValidInput(const std::string& input,model::dataTypes dataType);
 
 		int GetCountElemsForSearch(searchType st);
 
